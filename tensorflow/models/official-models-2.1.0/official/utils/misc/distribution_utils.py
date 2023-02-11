@@ -81,7 +81,7 @@ def _mirrored_cross_device_ops(all_reduce_alg, num_packs):
   return cross_device_ops_class(num_packs=num_packs)
 
 
-def get_distribution_strategy(distribution_strategy="mirrored",
+def get_distribution_strategy(distribution_strategy="parameter_server",
                               num_gpus=0,
                               num_workers=1,
                               all_reduce_alg=None,
@@ -151,7 +151,17 @@ def get_distribution_strategy(distribution_strategy="mirrored",
         cross_device_ops=_mirrored_cross_device_ops(all_reduce_alg, num_packs))
 
   if distribution_strategy == "parameter_server":
-    return tf.distribute.experimental.ParameterServerStrategy()
+    os.environ["TF_CONFIG"] = json.dumps({
+        "cluster": {
+            "worker": ["10.31.0.20:6433", "10.31.0.19:6434"],
+            "ps": ["10.31.0.30:6435"],
+            "chief": ["10.31.0.28:6436"]
+        },
+        "task": {"type": "chief", "index": 0}
+    })
+    cluster_resolver = tf.distribute.cluster_resolver.TFConfigClusterResolver()
+    return tf.distribute.experimental.ParameterServerStrategy(cluster_resolver, 
+      variable_partitioner=None)
 
   raise ValueError(
       "Unrecognized Distribution Strategy: %r" % distribution_strategy)

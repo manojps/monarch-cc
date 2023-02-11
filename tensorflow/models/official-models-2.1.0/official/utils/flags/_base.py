@@ -139,7 +139,7 @@ def define_base(data_dir=True, model_dir=True, clean=False, train_epochs=False,
 
   if distribution_strategy:
     flags.DEFINE_string(
-        name="distribution_strategy", short_name="ds", default="mirrored",
+        name="distribution_strategy", short_name="ds", default="parameter_server",
         help=help_wrap("The Distribution Strategy to use for training. "
                        "Accepted values are 'off', 'one_device', "
                        "'mirrored', 'parameter_server', 'collective', "
