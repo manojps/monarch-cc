@@ -33,7 +33,7 @@ from __future__ import print_function
 import os
 from absl import logging
 import tensorflow as tf
-import _py_pastor as pastor
+#import _py_pastor as pastor
 
 from official.vision.image_classification import shuffle_filenames 
 
