@@ -124,7 +124,7 @@ def process_record_dataset(dataset,
   # critical training path. Setting buffer_size to tf.data.experimental.AUTOTUNE
   # allows DistributionStrategies to adjust how many batches to fetch based
   # on how many devices are present.
-  #dataset = dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
+  dataset = dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 
   options = tf.data.Options()
   options.experimental_slack = tf_data_experimental_slack
@@ -145,14 +145,14 @@ def get_filenames(is_training, data_dir):
 
 def get_shuffled_filenames(is_training, data_dir, num_epochs):
   """Return filenames for dataset."""
-  if is_training:
-    bootstrap_client = pastor.BootstrapClient(SERVER_ADDRESS)
-    bootstrap_client.simple_request_session("single_process", 1, 1, True)
-    filenames_list = bootstrap_client.get_filenames_full_path()
+  # if is_training:
+  #   bootstrap_client = pastor.BootstrapClient(SERVER_ADDRESS)
+  #   bootstrap_client.simple_request_session("single_process", 1, 1, True)
+  #   filenames_list = bootstrap_client.get_filenames_full_path()
 
-    return [FS_DRIVER + f for f in filenames_list]
-  else:
-    return get_filenames(is_training, data_dir)
+  #   return [FS_DRIVER + f for f in filenames_list]
+  # else:
+  return get_filenames(is_training, data_dir)
 
 def _parse_example_proto(example_serialized):
   """Parses an Example proto containing a training example of an image.
@@ -308,13 +308,15 @@ def input_fn(is_training,
   # CPU cores.
   dataset = dataset.interleave(tf.data.TFRecordDataset, cycle_length=10, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
-  if is_training and training_dataset_cache:
-    # Improve training performance when training data is in remote storage and
-    # can fit into worker memory.
-    dataset = dataset.cache()
 
-  #if is_training: # Uncomment to use caching
-    #dataset = dataset.cache() # Uncomment to use caching
+
+  # if is_training and training_dataset_cache:
+  #   # Improve training performance when training data is in remote storage and
+  #   # can fit into worker memory.
+  #   dataset = dataset.cache()
+
+  # #if is_training: # Uncomment to use caching
+  #   #dataset = dataset.cache() # Uncomment to use caching
 
   return process_record_dataset(
       dataset=dataset,
