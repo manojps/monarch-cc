@@ -157,9 +157,21 @@ def get_distribution_strategy(distribution_strategy="parameter_server",
             "ps": ["10.31.0.30:6435"],
             "chief": ["10.31.0.28:6436"]
         },
-        "task": {"type": "chief", "index": 0}
+        "task": {"type": "ps", "index": 0}
     })
     cluster_resolver = tf.distribute.cluster_resolver.TFConfigClusterResolver()
+    if cluster_resolver.task_type in ("worker", "ps"):
+      # Start a TensorFlow server and wait.
+      os.environ["GRPC_FAIL_FAST"] = "use_caller"
+
+      server = tf.distribute.Server(
+          cluster_resolver.cluster_spec(),
+          job_name=cluster_resolver.task_type,
+          task_index=cluster_resolver.task_id,
+          protocol=cluster_resolver.rpc_layer or "grpc",
+          start=True)
+      server.join()
+
     return tf.distribute.experimental.ParameterServerStrategy(cluster_resolver, 
       variable_partitioner=None)
 
