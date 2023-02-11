@@ -227,7 +227,11 @@ def run(flags_obj):
     no_dist_strat_device = tf.device('/device:GPU:0')
     no_dist_strat_device.__enter__()
 
-  history = model.fit(tf.keras.utils.experimental.DatasetCreator(train_input_dataset),
+  input_options = tf.distribute.InputOptions(
+    experimental_fetch_to_device=False,
+    experimental_per_replica_buffer_size=1)
+
+  history = model.fit(tf.keras.utils.experimental.DatasetCreator(input_fn, input_options=input_options),
                       epochs=train_epochs,
                       steps_per_epoch=steps_per_epoch,
                       callbacks=callbacks,

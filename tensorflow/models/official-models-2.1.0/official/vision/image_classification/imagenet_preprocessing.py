@@ -124,7 +124,7 @@ def process_record_dataset(dataset,
   # critical training path. Setting buffer_size to tf.data.experimental.AUTOTUNE
   # allows DistributionStrategies to adjust how many batches to fetch based
   # on how many devices are present.
-  #dataset = dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
+  dataset = dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 
   options = tf.data.Options()
   options.experimental_slack = tf_data_experimental_slack
