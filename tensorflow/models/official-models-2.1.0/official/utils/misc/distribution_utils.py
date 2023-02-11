@@ -157,7 +157,7 @@ def get_distribution_strategy(distribution_strategy="parameter_server",
             "ps": ["10.31.0.30:6435"],
             "chief": ["10.31.0.28:6436"]
         },
-        "task": {"type": "chief", "index": 0}
+        "task": {"type": "worker", "index": 0}
     })
     cluster_resolver = tf.distribute.cluster_resolver.TFConfigClusterResolver()
     if cluster_resolver.task_type in ("worker", "ps"):
