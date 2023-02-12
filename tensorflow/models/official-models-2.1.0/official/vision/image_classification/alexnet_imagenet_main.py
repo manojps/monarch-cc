@@ -48,7 +48,7 @@ def dataset_fn(_):
   dataset = tf.data.Dataset.from_tensor_slices(filenames)
   dataset = dataset.interleave(tf.data.TFRecordDataset, cycle_length=40, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
-  dataset = dataset.shuffle(imagenet_preprocessing.NUM_IMAGES['train'])
+  dataset = dataset.shuffle(imagenet_preprocessing.NUM_IMAGES['train']).repeat()
   dataset = dataset.map(
         lambda value: imagenet_preprocessing.parse_record(value, is_training, dtype),
         num_parallel_calls=tf.data.experimental.AUTOTUNE)
