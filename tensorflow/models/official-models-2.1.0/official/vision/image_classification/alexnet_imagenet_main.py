@@ -38,30 +38,30 @@ from official.vision.image_classification import alexnet_model
 
 
 def dataset_fn(input_context):
-  # filenames = get_shuffled_filenames(is_training, data_dir, num_epochs)
-  # dataset = tf.data.Dataset.from_tensor_slices(filenames)
+  filenames = get_shuffled_filenames(is_training, data_dir, num_epochs)
+  dataset = tf.data.Dataset.from_tensor_slices(filenames)
 
-  # if input_context:
-  #   logging.info(
-  #       'Sharding the dataset: input_pipeline_id=%d num_input_pipelines=%d',
-  #       input_context.input_pipeline_id, input_context.num_input_pipelines)
-  #   dataset = dataset.shard(input_context.num_input_pipelines,
-  #                           input_context.input_pipeline_id)
-  #   dataset = dataset.interleave(tf.data.TFRecordDataset, cycle_length=10, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  if input_context:
+    logging.info(
+        'Sharding the dataset: input_pipeline_id=%d num_input_pipelines=%d',
+        input_context.input_pipeline_id, input_context.num_input_pipelines)
+    dataset = dataset.shard(input_context.num_input_pipelines,
+                            input_context.input_pipeline_id)
+    dataset = dataset.interleave(tf.data.TFRecordDataset, cycle_length=10, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
-  # dataset = dataset.shuffle(buffer_size=shuffle_buffer)
-  # dataset = dataset.map(
-  #       lambda value: parse_record_fn(value, is_training, dtype),
-  #       num_parallel_calls=tf.data.experimental.AUTOTUNE)
-  # dataset = dataset.batch(batch_size, drop_remainder=drop_remainder)
-  # dataset = dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
+  dataset = dataset.shuffle(buffer_size=shuffle_buffer)
+  dataset = dataset.map(
+        lambda value: parse_record_fn(value, is_training, dtype),
+        num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  dataset = dataset.batch(batch_size, drop_remainder=drop_remainder)
+  dataset = dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 
-  x = tf.random.uniform((10, 10))
-  y = tf.random.uniform((10,))
+  # x = tf.random.uniform((10, 10))
+  # y = tf.random.uniform((10,))
 
-  dataset = tf.data.Dataset.from_tensor_slices((x, y)).shuffle(10).repeat()
-  dataset = dataset.batch(global_batch_size)
-  dataset = dataset.prefetch(2)
+  # dataset = tf.data.Dataset.from_tensor_slices((x, y)).shuffle(10).repeat()
+  # dataset = dataset.batch(global_batch_size)
+  # dataset = dataset.prefetch(2)
   return dataset
 
 def run_(flags_obj):
@@ -257,11 +257,11 @@ def run_(flags_obj):
 
   
 
-  input_options = tf.distribute.InputOptions(
-    experimental_fetch_to_device=False,
-    experimental_per_replica_buffer_size=1)
+  # input_options = tf.distribute.InputOptions(
+  #   experimental_fetch_to_device=False,
+  #   experimental_per_replica_buffer_size=1)
 
-  history = model.fit(tf.keras.utils.experimental.DatasetCreator(dataset_fn, input_options=input_options),
+  history = model.fit(input_fn,
                       epochs=train_epochs,
                       steps_per_epoch=steps_per_epoch,
                       callbacks=callbacks,
