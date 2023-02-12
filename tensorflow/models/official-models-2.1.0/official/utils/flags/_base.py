@@ -92,7 +92,7 @@ def define_base(data_dir=True, model_dir=True, clean=False, train_epochs=False,
 
   if batch_size:
     flags.DEFINE_integer(
-        name="batch_size", short_name="bs", default=32,
+        name="batch_size", short_name="bs", default=512,
         help=help_wrap("Batch size for training and evaluation. When using "
                        "multiple gpus, this is the global batch size for "
                        "all devices. For example, if the batch size is 32 "
