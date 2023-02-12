@@ -36,8 +36,28 @@ from official.vision.image_classification import imagenet_preprocessing
 from official.vision.image_classification import resnet_model
 import resource
 
+def dataset_fn(_):
+  is_training = True
+  data_dir = '/home/cc/nfs/imagenet/tf_records/train/'
+  num_epochs = 5
+  batch_size = 512
+  dtype = tf.float32
+  shuffle_buffer = 100000
 
-def run(flags_obj):
+  filenames = imagenet_preprocessing.get_shuffled_filenames(is_training, data_dir, num_epochs)
+  dataset = tf.data.Dataset.from_tensor_slices(filenames)
+  dataset = dataset.interleave(tf.data.TFRecordDataset, cycle_length=40, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
+  dataset = dataset.shuffle(shuffle_buffer).repeat()
+  dataset = dataset.map(
+        lambda value: imagenet_preprocessing.parse_record(value, is_training, dtype),
+        num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  dataset = dataset.batch(batch_size, drop_remainder=False)
+  dataset = dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
+
+  return dataset
+
+def run_(flags_obj):
   """Run ResNet ImageNet training and eval loop using native Keras APIs.
 
   Args:
@@ -260,6 +280,67 @@ def run(flags_obj):
 
   stats = common.build_stats(history, eval_output, callbacks)
   return stats
+
+def run(flags_obj):
+  os.environ["TF_CONFIG"] = json.dumps({
+      "cluster": {
+              "worker": ["10.31.0.20:6433", "10.31.0.19:6434"],
+              "ps": ["10.31.0.30:6435"],
+              "chief": ["10.31.0.28:6436"]
+      },
+      "task": {"type": "worker", "index": 0}
+  })
+
+
+  print("1 --- ")
+  cluster_resolver = tf.distribute.cluster_resolver.TFConfigClusterResolver()
+  if cluster_resolver.task_type in ("worker", "ps"):
+      # Start a TensorFlow server and wait.
+      os.environ["GRPC_FAIL_FAST"] = "use_caller"
+
+      worker_config = tf.compat.v1.ConfigProto()
+      worker_config.inter_op_parallelism_threads = 8
+
+      server = tf.distribute.Server(
+          cluster_resolver.cluster_spec(),
+          job_name=cluster_resolver.task_type,
+          task_index=cluster_resolver.task_id,
+          protocol=cluster_resolver.rpc_layer or "grpc",
+          config=worker_config,
+          start=True)
+      server.join()
+
+  strategy = tf.distribute.experimental.ParameterServerStrategy(cluster_resolver, 
+    variable_partitioner=None)
+  print("Cluster initialized")
+
+  lr_schedule = 0.1
+  # if flags_obj.use_tensor_lr:
+  if True:
+    lr_schedule = common.PiecewiseConstantDecayWithWarmup(
+        batch_size=flags_obj.batch_size,
+        epoch_size=imagenet_preprocessing.NUM_IMAGES['train'],
+        warmup_epochs=common.LR_SCHEDULE[0][1],
+        boundaries=list(p[1] for p in common.LR_SCHEDULE[1:]),
+        multipliers=list(p[0] for p in common.LR_SCHEDULE),
+        compute_lr_on_cpu=True)
+  
+  print(type(lr_schedule),lr_schedule)
+
+  with strategy.scope():
+    model = resnet_model.resnet50(
+          num_classes=imagenet_preprocessing.NUM_CLASSES)
+    # optimizer = common.get_optimizer(lr_schedule)
+    optimizer = tf.keras.optimizers.legacy.SGD()
+    model.compile(optimizer, loss = "mse")
+
+  steps_per_epoch=imagenet_preprocessing.NUM_IMAGES['train'] // flags_obj.batch_size
+
+  dataset_creator = tf.keras.utils.experimental.DatasetCreator(dataset_fn)
+
+  model.fit(dataset_creator, epochs=flags_obj.train_epochs, steps_per_epoch=steps_per_epoch)
+
+  return 
 
 
 def define_imagenet_keras_flags():
