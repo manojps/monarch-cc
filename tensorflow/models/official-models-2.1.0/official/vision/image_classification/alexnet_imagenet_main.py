@@ -37,23 +37,22 @@ from official.vision.image_classification import imagenet_preprocessing
 from official.vision.image_classification import alexnet_model
 
 
-def dataset_fn(input_context):
-  filenames = get_shuffled_filenames(is_training, data_dir, num_epochs)
+def dataset_fn(_):
+  is_training = True
+  data_dir = '/home/cc/nfs/imagenet/tf_records/train/'
+  num_epochs = 5
+  batch_size = 512
+  dtype = tf.float32
+  
+  filenames = imagenet_preprocessing.get_shuffled_filenames(is_training, data_dir, num_epochs)
   dataset = tf.data.Dataset.from_tensor_slices(filenames)
+  dataset = dataset.interleave(tf.data.TFRecordDataset, cycle_length=40, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
-  if input_context:
-    logging.info(
-        'Sharding the dataset: input_pipeline_id=%d num_input_pipelines=%d',
-        input_context.input_pipeline_id, input_context.num_input_pipelines)
-    dataset = dataset.shard(input_context.num_input_pipelines,
-                            input_context.input_pipeline_id)
-    dataset = dataset.interleave(tf.data.TFRecordDataset, cycle_length=10, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-
-  dataset = dataset.shuffle(buffer_size=shuffle_buffer)
+  dataset = dataset.shuffle(imagenet_preprocessing.NUM_IMAGES['train'])
   dataset = dataset.map(
-        lambda value: parse_record_fn(value, is_training, dtype),
+        lambda value: imagenet_preprocessing.parse_record(value, is_training, dtype),
         num_parallel_calls=tf.data.experimental.AUTOTUNE)
-  dataset = dataset.batch(batch_size, drop_remainder=drop_remainder)
+  dataset = dataset.batch(batch_size, drop_remainder=False)
   dataset = dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 
   # x = tf.random.uniform((10, 10))
@@ -331,8 +330,8 @@ def run(flags_obj):
   
   print(type(lr_schedule),lr_schedule)
 
-  filenames = imagenet_preprocessing.get_shuffled_filenames(True, flags_obj.data_dir, 2)
-  dataset = tf.data.Dataset.from_tensor_slices(filenames).shuffle(10).repeat().batch(64)
+  # filenames = imagenet_preprocessing.get_shuffled_filenames(True, flags_obj.data_dir, 2)
+  # dataset = tf.data.Dataset.from_tensor_slices(filenames).shuffle(10).repeat().batch(64)
 
   # if input_context:
   #   logging.info(
@@ -340,20 +339,22 @@ def run(flags_obj):
   #       input_context.input_pipeline_id, input_context.num_input_pipelines)
   #   dataset = dataset.shard(input_context.num_input_pipelines,
   #                           input_context.input_pipeline_id)
-  dataset = dataset.interleave(tf.data.TFRecordDataset, cycle_length=10, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  # dataset = dataset.interleave(tf.data.TFRecordDataset, cycle_length=10, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
-  dataset = dataset.shuffle(buffer_size=2)
-  dataset = dataset.map(
-        lambda value: imagenet_preprocessing.parse_record(value, True, tf.float32),
-        num_parallel_calls=tf.data.experimental.AUTOTUNE)
-  dataset = dataset.batch(128)
-  dataset = dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
+  # dataset = dataset.shuffle(buffer_size=2)
+  # dataset = dataset.map(
+  #       lambda value: imagenet_preprocessing.parse_record(value, True, tf.float32),
+  #       num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  # dataset = dataset.batch(128)
+  # dataset = dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 
   # input_options = tf.distribute.InputOptions(
   #   experimental_fetch_to_device=True,
   #   experimental_per_replica_buffer_size=2)
 
-  print(type(dataset), dataset)
+  # print(type(dataset), dataset)
+
+  
 
   with strategy.scope():
     model = alexnet_model.alexnet()
@@ -361,7 +362,11 @@ def run(flags_obj):
     optimizer = tf.keras.optimizers.legacy.SGD()
     model.compile(optimizer, loss = "mse")
 
-  model.fit(dataset, epochs=flags_obj.train_epochs, steps_per_epoch=imagenet_preprocessing.NUM_IMAGES['train'] // flags_obj.batch_size)
+  steps_per_epoch=imagenet_preprocessing.NUM_IMAGES['train'] // flags_obj.batch_size
+
+  dataset_creator = tf.keras.utils.experimental.DatasetCreator(dataset_fn)
+
+  model.fit(dataset_creator, epochs=flags_obj.train_epochs, steps_per_epoch=steps_per_epoch)
 
   return 
 
