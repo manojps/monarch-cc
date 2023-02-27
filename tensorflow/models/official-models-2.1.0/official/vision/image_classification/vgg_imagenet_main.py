@@ -170,7 +170,7 @@ def run(flags_obj):
       model = trivial_model.trivial_model(
           imagenet_preprocessing.NUM_CLASSES)
     else:
-      model = vgg_model.vgg16()
+      model = vgg_model.vgg16(num_classes=1000)
 
     # TODO(b/138957587): Remove when force_v2_in_keras_compile is on longer
     # a valid arg for this model. Also remove as a valid flag.
