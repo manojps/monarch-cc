@@ -39,7 +39,7 @@ from official.vision.image_classification import vgg_model
 
 def dataset_fn(_):
   is_training = True
-  data_dir = '/home/cc/nfs/imagenet/tf_records/train/'
+  data_dir = '/home/cc/datasets/imagenet/tf_records/train/'
   num_epochs = 5
   batch_size = 512
   dtype = tf.float32
