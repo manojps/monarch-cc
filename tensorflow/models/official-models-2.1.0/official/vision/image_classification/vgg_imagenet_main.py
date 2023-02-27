@@ -34,7 +34,7 @@ from official.utils.misc import keras_utils
 from official.utils.misc import model_helpers
 from official.vision.image_classification import common
 from official.vision.image_classification import imagenet_preprocessing
-from official.vision.image_classification import alexnet_model
+from official.vision.image_classification import vgg_model
 
 
 def dataset_fn(_):
