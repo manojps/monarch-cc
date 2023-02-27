@@ -313,6 +313,38 @@ def run(flags_obj):
 #         # Memory growth must be set before GPUs have been initialized
 #         print(e)
 
+  keras_utils.set_session_config(
+      enable_eager=flags_obj.enable_eager,
+      enable_xla=flags_obj.enable_xla)
+
+  # Execute flag override logic for better model performance
+  if flags_obj.tf_gpu_thread_mode:
+    keras_utils.set_gpu_thread_mode_and_count(
+        per_gpu_thread_count=flags_obj.per_gpu_thread_count,
+        gpu_thread_mode=flags_obj.tf_gpu_thread_mode,
+        num_gpus=flags_obj.num_gpus,
+        datasets_num_private_threads=flags_obj.datasets_num_private_threads)
+  common.set_cudnn_batchnorm_mode()
+
+  dtype = flags_core.get_tf_dtype(flags_obj)
+  if dtype == tf.float16:
+    loss_scale = flags_core.get_loss_scale(flags_obj, default_for_fp16=128)
+    policy = tf.compat.v2.keras.mixed_precision.experimental.Policy(
+        'mixed_float16', loss_scale=loss_scale)
+    tf.compat.v2.keras.mixed_precision.experimental.set_policy(policy)
+    if not keras_utils.is_v2_0():
+      raise ValueError('--dtype=fp16 is not supported in TensorFlow 1.')
+  elif dtype == tf.bfloat16:
+    policy = tf.compat.v2.keras.mixed_precision.experimental.Policy(
+        'mixed_bfloat16')
+    tf.compat.v2.keras.mixed_precision.experimental.set_policy(policy)
+
+  data_format = flags_obj.data_format
+  if data_format is None:
+    data_format = ('channels_first'
+                   if tf.test.is_built_with_cuda() else 'channels_last')
+  tf.keras.backend.set_image_data_format(data_format)
+
   os.environ["TF_CONFIG"] = json.dumps({
       "cluster": {
             "worker": ["10.31.0.72:6433", "10.31.0.74:6434"],
@@ -382,8 +414,8 @@ def run(flags_obj):
 
   with strategy.scope():
     model = vgg_model.vgg16(num_classes=1000)
-    optimizer = common.get_optimizer(lr_schedule)
-    # optimizer = tf.keras.optimizers.legacy.SGD()
+    # optimizer = common.get_optimizer(lr_schedule)
+    optimizer = tf.keras.optimizers.legacy.SGD()
     model.compile(optimizer, loss = "mse")
 
   steps_per_epoch=imagenet_preprocessing.NUM_IMAGES['train'] // flags_obj.batch_size
