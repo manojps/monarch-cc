@@ -22,6 +22,10 @@ Related papers/blogs:
 
 import tensorflow as tf
 
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Activation, Dropout, Flatten, Conv2D, MaxPool2D , Flatten
+from tensorflow.keras.layers import BatchNormalization
+
 layers = tf.keras.layers
 
 
@@ -30,7 +34,7 @@ def _gen_l2_regularizer(use_l2_regularizer=True, l2_weight_decay=1e-4):
       l2_weight_decay) if use_l2_regularizer else None
 
 
-def vgg16(num_classes,
+def vgg16_old(num_classes,
           batch_size=None,
           use_l2_regularizer=True,
           batch_norm_decay=0.9,
@@ -267,3 +271,35 @@ def vgg16(num_classes,
 
   # Create model.
   return tf.keras.Model(img_input, x, name='vgg16')
+
+def vgg16_new():
+  model = Sequential()
+  model.add(Conv2D(input_shape=(224,224,3),filters=64,kernel_size=(3,3),padding="same", activation="relu"))
+  model.add(Conv2D(filters=64,kernel_size=(3,3),padding="same", activation="relu"))
+  model.add(MaxPool2D(pool_size=(2,2),strides=(2,2)))
+  
+  model.add(Conv2D(filters=128, kernel_size=(3,3), padding="same", activation="relu"))
+  model.add(Conv2D(filters=128, kernel_size=(3,3), padding="same", activation="relu"))
+  model.add(MaxPool2D(pool_size=(2,2),strides=(2,2)))
+
+  model.add(Conv2D(filters=256, kernel_size=(3,3), padding="same", activation="relu"))
+  model.add(Conv2D(filters=256, kernel_size=(3,3), padding="same", activation="relu"))
+  model.add(Conv2D(filters=256, kernel_size=(3,3), padding="same", activation="relu"))
+  model.add(MaxPool2D(pool_size=(2,2),strides=(2,2)))
+
+  model.add(Conv2D(filters=512, kernel_size=(3,3), padding="same", activation="relu"))
+  model.add(Conv2D(filters=512, kernel_size=(3,3), padding="same", activation="relu"))
+  model.add(Conv2D(filters=512, kernel_size=(3,3), padding="same", activation="relu"))
+  model.add(MaxPool2D(pool_size=(2,2),strides=(2,2)))
+
+  model.add(Conv2D(filters=512, kernel_size=(3,3), padding="same", activation="relu"))
+  model.add(Conv2D(filters=512, kernel_size=(3,3), padding="same", activation="relu"))
+  model.add(Conv2D(filters=512, kernel_size=(3,3), padding="same", activation="relu"))
+  model.add(MaxPool2D(pool_size=(2,2),strides=(2,2)))
+
+  model.add(Flatten())
+  model.add(Dense(units=4096,activation="relu"))
+  model.add(Dense(units=4096,activation="relu"))
+  model.add(Dense(units=2, activation="softmax"))
+
+  return model 
