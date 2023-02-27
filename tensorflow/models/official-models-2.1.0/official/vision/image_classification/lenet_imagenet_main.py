@@ -325,7 +325,7 @@ def run(flags_obj):
   
 
   with strategy.scope():
-    model = alexnet_model.alexnet()
+    model = lenet_model.lenet()
     # optimizer = common.get_optimizer(lr_schedule)
     optimizer = tf.keras.optimizers.legacy.SGD()
     model.compile(optimizer, loss = "mse")
