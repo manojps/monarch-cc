@@ -413,7 +413,8 @@ def run(flags_obj):
   
 
   with strategy.scope():
-    model = vgg_model.vgg16(num_classes=1000)
+    # model = vgg_model.vgg16(num_classes=1000)
+    model = vgg_model.vgg16_new()
     # model = tf.keras.applications.vgg16.VGG16()
     # optimizer = common.get_optimizer(lr_schedule)
 
