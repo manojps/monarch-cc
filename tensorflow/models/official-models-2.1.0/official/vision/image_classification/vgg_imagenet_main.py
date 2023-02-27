@@ -296,7 +296,7 @@ def run(flags_obj):
             "ps": ["10.31.0.73:6435"],
             "chief": ["10.31.0.76:6436"]
         },
-      "task": {"type": "chief", "index": 0}
+      "task": {"type": "worker", "index": 0}
   })
 
 
