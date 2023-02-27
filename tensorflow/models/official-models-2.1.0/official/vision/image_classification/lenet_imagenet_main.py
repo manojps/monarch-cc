@@ -36,7 +36,7 @@ from official.vision.image_classification import imagenet_preprocessing
 from official.vision.image_classification import lenet_model
 
 
-def run(flags_obj):
+def run_(flags_obj):
   """Run ResNet ImageNet training and eval loop using native Keras APIs.
 
   Args:
@@ -255,6 +255,87 @@ def run(flags_obj):
   stats = common.build_stats(history, eval_output, callbacks)
   return stats
 
+def run(flags_obj):
+  os.environ["TF_CONFIG"] = json.dumps({
+      "cluster": {
+            "worker": ["10.31.0.72:6433", "10.31.0.74:6434"],
+            "ps": ["10.31.0.73:6435"],
+            "chief": ["10.31.0.76:6436"]
+        },
+      "task": {"type": "chief", "index": 0}
+  })
+
+
+  print("1 --- ")
+  cluster_resolver = tf.distribute.cluster_resolver.TFConfigClusterResolver()
+  if cluster_resolver.task_type in ("worker", "ps"):
+      # Start a TensorFlow server and wait.
+      os.environ["GRPC_FAIL_FAST"] = "use_caller"
+
+      server = tf.distribute.Server(
+          cluster_resolver.cluster_spec(),
+          job_name=cluster_resolver.task_type,
+          task_index=cluster_resolver.task_id,
+          protocol=cluster_resolver.rpc_layer or "grpc",
+          start=True)
+      server.join()
+
+  strategy = tf.distribute.experimental.ParameterServerStrategy(cluster_resolver, 
+    variable_partitioner=None)
+  print("Cluster initialized")
+
+  lr_schedule = 0.1
+  # if flags_obj.use_tensor_lr:
+  if True:
+    lr_schedule = common.PiecewiseConstantDecayWithWarmup(
+        batch_size=flags_obj.batch_size,
+        epoch_size=imagenet_preprocessing.NUM_IMAGES['train'],
+        warmup_epochs=common.LR_SCHEDULE[0][1],
+        boundaries=list(p[1] for p in common.LR_SCHEDULE[1:]),
+        multipliers=list(p[0] for p in common.LR_SCHEDULE),
+        compute_lr_on_cpu=True)
+  
+  print(type(lr_schedule),lr_schedule)
+
+  # filenames = imagenet_preprocessing.get_shuffled_filenames(True, flags_obj.data_dir, 2)
+  # dataset = tf.data.Dataset.from_tensor_slices(filenames).shuffle(10).repeat().batch(64)
+
+  # if input_context:
+  #   logging.info(
+  #       'Sharding the dataset: input_pipeline_id=%d num_input_pipelines=%d',
+  #       input_context.input_pipeline_id, input_context.num_input_pipelines)
+  #   dataset = dataset.shard(input_context.num_input_pipelines,
+  #                           input_context.input_pipeline_id)
+  # dataset = dataset.interleave(tf.data.TFRecordDataset, cycle_length=10, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
+  # dataset = dataset.shuffle(buffer_size=2)
+  # dataset = dataset.map(
+  #       lambda value: imagenet_preprocessing.parse_record(value, True, tf.float32),
+  #       num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  # dataset = dataset.batch(128)
+  # dataset = dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
+
+  # input_options = tf.distribute.InputOptions(
+  #   experimental_fetch_to_device=True,
+  #   experimental_per_replica_buffer_size=2)
+
+  # print(type(dataset), dataset)
+
+  
+
+  with strategy.scope():
+    model = alexnet_model.alexnet()
+    # optimizer = common.get_optimizer(lr_schedule)
+    optimizer = tf.keras.optimizers.legacy.SGD()
+    model.compile(optimizer, loss = "mse")
+
+  steps_per_epoch=imagenet_preprocessing.NUM_IMAGES['train'] // flags_obj.batch_size
+
+  dataset_creator = tf.keras.utils.experimental.DatasetCreator(dataset_fn)
+
+  model.fit(dataset_creator, epochs=flags_obj.train_epochs, steps_per_epoch=steps_per_epoch)
+
+  return 
 
 def define_imagenet_keras_flags():
   common.define_keras_flags()
