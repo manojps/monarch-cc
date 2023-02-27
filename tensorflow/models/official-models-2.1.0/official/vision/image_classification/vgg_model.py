@@ -302,4 +302,6 @@ def vgg16_new():
   model.add(Dense(units=4096,activation="relu"))
   model.add(Dense(units=2, activation="softmax"))
 
+  print(model.summary())
+  
   return model 
