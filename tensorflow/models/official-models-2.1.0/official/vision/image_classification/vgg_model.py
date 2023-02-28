@@ -23,7 +23,7 @@ Related papers/blogs:
 import tensorflow as tf
 
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, Activation, Dropout, Flatten, Conv2D, MaxPool2D , Flatten
+from tensorflow.keras.layers import Dense, Activation, Dropout, Flatten, Conv2D, MaxPooling2D, MaxPool2D , Flatten
 from tensorflow.keras.layers import BatchNormalization
 
 layers = tf.keras.layers
