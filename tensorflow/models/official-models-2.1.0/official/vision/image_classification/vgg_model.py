@@ -52,7 +52,7 @@ def vgg16_old(num_classes,
     A Keras model instance.
 
   """
-  input_shape = (64, 64, 3)
+  input_shape = (128, 128, 3)
 #   input_shape = (224, 224, 3)
   img_input = layers.Input(shape=input_shape, batch_size=batch_size)
 
