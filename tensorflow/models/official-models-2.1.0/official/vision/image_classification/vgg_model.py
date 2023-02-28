@@ -309,7 +309,7 @@ def vgg16_new_():
 def vgg16_new():
   model = Sequential()
   model.add(Conv2D(64, kernel_size=(3,3), padding= 'same',
-                        activation= 'relu', input_shape= input_shape))
+                        activation= 'relu', input_shape= (64,64,3)))
   model.add(Conv2D(64, kernel_size=(3,3), padding= 'same',
                         activation= 'relu'))
   model.add(MaxPooling2D(pool_size=(2,2), strides= (2,2)))
