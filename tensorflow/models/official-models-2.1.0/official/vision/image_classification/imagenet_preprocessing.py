@@ -37,7 +37,8 @@ import tensorflow as tf
 
 from official.vision.image_classification import shuffle_filenames 
 
-DEFAULT_IMAGE_SIZE = 224
+# DEFAULT_IMAGE_SIZE = 224
+DEFAULT_IMAGE_SIZE = 64
 NUM_CHANNELS = 3
 NUM_CLASSES = 1001
 
