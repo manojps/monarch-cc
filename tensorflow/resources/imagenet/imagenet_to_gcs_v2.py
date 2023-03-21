@@ -56,7 +56,9 @@ from absl import app
 from absl import flags
 import tensorflow as tf
 
-from google.cloud import storage
+# from google.cloud import storage
+
+tf.compat.v1.disable_eager_execution()
 
 flags.DEFINE_string(
     'project', None, 'Google cloud project id for uploading the dataset.')
@@ -77,7 +79,7 @@ flags.DEFINE_boolean(
 FLAGS = flags.FLAGS
 
 BASE_URL = 'http://www.image-net.org/challenges/LSVRC/2012/nnoupb/'
-LABELS_URL = 'https://raw.githubusercontent.com/tensorflow/models/master/research/inception/inception/data/imagenet_2012_validation_synset_labels.txt'  # pylint: disable=line-too-long
+LABELS_URL = 'https://raw.githubusercontent.com/tensorflow/models/master/research/slim/datasets/imagenet_2012_validation_synset_labels.txt'  # pylint: disable=line-too-long
 
 TRAINING_FILE = 'ILSVRC2012_img_train.tar'
 VALIDATION_FILE = 'ILSVRC2012_img_val.tar'
@@ -123,10 +125,10 @@ def download_dataset(raw_data_dir):
   _check_or_create_dir(raw_data_dir)
 
   # Download the training data
-  tf.compat.v1.logging.info('Downloading the training set. This may take a few hours.')
-  directory = os.path.join(raw_data_dir, TRAINING_DIRECTORY)
-  filename = os.path.join(raw_data_dir, TRAINING_FILE)
-  _download(BASE_URL + TRAINING_FILE, filename)
+  # tf.compat.v1.logging.info('Downloading the training set. This may take a few hours.')
+  # directory = os.path.join(raw_data_dir, TRAINING_DIRECTORY)
+  # filename = os.path.join(raw_data_dir, TRAINING_FILE)
+  # _download(BASE_URL + TRAINING_FILE, filename)
 
   # The training tarball contains multiple tar balls inside it. Extract them
   # in order to create a clean directory structure.
@@ -143,11 +145,11 @@ def download_dataset(raw_data_dir):
   _download(LABELS_URL, os.path.join(raw_data_dir, LABELS_FILE))
 
   # Download the validation data
-  tf.compat.v1.logging.info('Downloading the validation set. This may take a few hours.')
-  directory = os.path.join(raw_data_dir, VALIDATION_DIRECTORY)
-  filename = os.path.join(raw_data_dir, VALIDATION_FILE)
-  _download(BASE_URL + VALIDATION_FILE, filename)
-  _untar_file(filename, directory)
+  # tf.compat.v1.logging.info('Downloading the validation set. This may take a few hours.')
+  # directory = os.path.join(raw_data_dir, VALIDATION_DIRECTORY)
+  # filename = os.path.join(raw_data_dir, VALIDATION_FILE)
+  # _download(BASE_URL + VALIDATION_FILE, filename)
+  # _untar_file(filename, directory)
 
 
 def _int64_feature(value):
@@ -159,6 +161,8 @@ def _int64_feature(value):
 
 def _bytes_feature(value):
   """Wrapper for inserting bytes features into Example proto."""
+  if isinstance(value, type(tf.constant(0))):
+    value = value.numpy() # BytesList won't unpack a string from an EagerTensor.
   return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
 
 
@@ -175,9 +179,9 @@ def _convert_to_example(filename, image_buffer, label, synset, height, width):
   Returns:
     Example proto
   """
-  colorspace = 'RGB'
+  colorspace = 'RGB'.encode()
   channels = 3
-  image_format = 'JPEG'
+  image_format = 'JPEG'.encode()
 
   example = tf.train.Example(features=tf.train.Features(feature={
       'image/height': _int64_feature(height),
@@ -185,9 +189,9 @@ def _convert_to_example(filename, image_buffer, label, synset, height, width):
       'image/colorspace': _bytes_feature(colorspace),
       'image/channels': _int64_feature(channels),
       'image/class/label': _int64_feature(label),
-      'image/class/synset': _bytes_feature(synset),
+      'image/class/synset': _bytes_feature(synset.encode()),
       'image/format': _bytes_feature(image_format),
-      'image/filename': _bytes_feature(os.path.basename(filename)),
+      'image/filename': _bytes_feature(os.path.basename(filename.encode())),
       'image/encoded': _bytes_feature(image_buffer)}))
   return example
 
@@ -280,7 +284,7 @@ def _process_image(filename, coder):
     width: integer, image width in pixels.
   """
   # Read the image file.
-  with tf.compat.v1.gfile.FastGFile(filename, 'r') as f:
+  with tf.compat.v1.gfile.FastGFile(filename, 'rb') as f:
     image_data = f.read()
 
   # Clean the dirty data.
@@ -367,7 +371,7 @@ def convert_to_tf_records(raw_data_dir):
   # across the batches.
   random.seed(0)
   def make_shuffle_idx(n):
-    order = range(n)
+    order = list(range(n))
     random.shuffle(order)
     return order
 
