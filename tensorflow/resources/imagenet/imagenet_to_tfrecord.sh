@@ -9,18 +9,18 @@ export IMAGENET_HOME=/home/cc/dataset_backup
 
 # # Extract and then delete individual training tar files This can be pasted
 # # directly into a bash command-line or create a file and execute.
-# cd $IMAGENET_HOME/train
+cd $IMAGENET_HOME/train
 
-# for f in *.tar; do
-# 	d=`basename $f .tar`
-# 	mkdir $d
-# 	tar xf $f -C $d
-# done
+for f in *.tar; do
+	d=`basename $f .tar`
+	mkdir $d
+	tar xf $f -C $d
+done
 
 cd $IMAGENET_HOME # Move back to the base folder
 
       # [Optional] Delete tar files if desired as they are not needed
-      # rm $IMAGENET_HOME/train/*.tar
+      rm $IMAGENET_HOME/train/*.tar
 
       # Download labels file.
       wget -O $IMAGENET_HOME/synset_labels.txt \

@@ -161,8 +161,8 @@ def _int64_feature(value):
 
 def _bytes_feature(value):
   """Wrapper for inserting bytes features into Example proto."""
-  if isinstance(value, type(tf.constant(0))):
-    value = value.numpy() # BytesList won't unpack a string from an EagerTensor.
+  # if isinstance(value, type(tf.constant(0))):
+  #   value = value.numpy() # BytesList won't unpack a string from an EagerTensor.
   return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
 
 
@@ -179,9 +179,9 @@ def _convert_to_example(filename, image_buffer, label, synset, height, width):
   Returns:
     Example proto
   """
-  colorspace = 'RGB'.encode()
+  colorspace = b'RGB'
   channels = 3
-  image_format = 'JPEG'.encode()
+  image_format = b'JPEG'
 
   example = tf.train.Example(features=tf.train.Features(feature={
       'image/height': _int64_feature(height),
@@ -400,11 +400,11 @@ def convert_to_tf_records(raw_data_dir):
       sorted(set(validation_synsets + training_synsets)))}
 
   # Create training data
-  #tf.compat.v1.logging.info('Processing the training data.')
-  #training_records = _process_dataset(
-   #   training_files, training_synsets, labels,
-    #  os.path.join(FLAGS.local_scratch_dir, TRAINING_DIRECTORY),
-     # TRAINING_DIRECTORY, TRAINING_SHARDS)
+  tf.compat.v1.logging.info('Processing the training data.')
+  training_records = _process_dataset(
+     training_files, training_synsets, labels,
+     os.path.join(FLAGS.local_scratch_dir, TRAINING_DIRECTORY),
+     TRAINING_DIRECTORY, TRAINING_SHARDS)
 
   # Create validation data
   tf.compat.v1.logging.info('Processing the validation data.')
