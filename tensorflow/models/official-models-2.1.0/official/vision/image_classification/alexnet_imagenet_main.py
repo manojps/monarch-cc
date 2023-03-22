@@ -19,6 +19,7 @@ from __future__ import division
 from __future__ import print_function
 
 import os
+import json
 
 from absl import app
 from absl import flags
@@ -36,7 +37,34 @@ from official.vision.image_classification import imagenet_preprocessing
 from official.vision.image_classification import alexnet_model
 
 
-def run(flags_obj):
+def dataset_fn(_):
+  is_training = True
+  data_dir = '/home/cc/nfs/imagenet/tf_records/train/'
+  num_epochs = 5
+  batch_size = 512
+  dtype = tf.float32
+  shuffle_buffer = 100000
+
+  filenames = imagenet_preprocessing.get_shuffled_filenames(is_training, data_dir, num_epochs)
+  dataset = tf.data.Dataset.from_tensor_slices(filenames)
+  dataset = dataset.interleave(tf.data.TFRecordDataset, cycle_length=40, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
+  dataset = dataset.shuffle(shuffle_buffer).repeat()
+  dataset = dataset.map(
+        lambda value: imagenet_preprocessing.parse_record(value, is_training, dtype),
+        num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  dataset = dataset.batch(batch_size, drop_remainder=False)
+  dataset = dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
+
+  # x = tf.random.uniform((10, 10))
+  # y = tf.random.uniform((10,))
+
+  # dataset = tf.data.Dataset.from_tensor_slices((x, y)).shuffle(10).repeat()
+  # dataset = dataset.batch(global_batch_size)
+  # dataset = dataset.prefetch(2)
+  return dataset
+
+def run_(flags_obj):
   """Run ResNet ImageNet training and eval loop using native Keras APIs.
 
   Args:
@@ -227,7 +255,13 @@ def run(flags_obj):
     no_dist_strat_device = tf.device('/device:GPU:0')
     no_dist_strat_device.__enter__()
 
-  history = model.fit(tf.keras.utils.experimental.DatasetCreator(train_input_dataset),
+  
+
+  # input_options = tf.distribute.InputOptions(
+  #   experimental_fetch_to_device=False,
+  #   experimental_per_replica_buffer_size=1)
+
+  history = model.fit(input_fn,
                       epochs=train_epochs,
                       steps_per_epoch=steps_per_epoch,
                       callbacks=callbacks,
@@ -255,6 +289,36 @@ def run(flags_obj):
   stats = common.build_stats(history, eval_output, callbacks)
   return stats
 
+def run(flags_obj):
+  os.environ["TF_CONFIG"] = json.dumps({
+      "cluster": {
+            "worker": ["10.31.0.72:6433", "10.31.0.74:6434"]
+        },
+      "task": {"type": "worker", "index": 0}
+  })
+
+  num_workers = len(tf_config['cluster']['worker'])
+
+  print("1 --- ")
+
+
+  strategy = tf.distribute.MultiWorkerMirroredStrategy()
+
+  print("Cluster initialized")
+
+  with strategy.scope():
+    model = alexnet_model.alexnet()
+    # optimizer = common.get_optimizer(lr_schedule)
+    optimizer = tf.keras.optimizers.legacy.SGD()
+    model.compile(optimizer, loss = "mse")
+
+  steps_per_epoch=imagenet_preprocessing.NUM_IMAGES['train'] // flags_obj.batch_size
+
+  dataset_creator = tf.keras.utils.experimental.DatasetCreator(dataset_fn)
+
+  model.fit(dataset_creator, epochs=flags_obj.train_epochs, steps_per_epoch=steps_per_epoch)
+
+  return 
 
 def define_imagenet_keras_flags():
   common.define_keras_flags()
