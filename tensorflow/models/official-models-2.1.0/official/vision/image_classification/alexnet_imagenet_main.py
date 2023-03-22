@@ -53,6 +53,13 @@ def dataset_fn(_):
   dataset = dataset.map(
         lambda value: imagenet_preprocessing.parse_record(value, is_training, dtype),
         num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  if input_context:
+    logging.info(
+        'Sharding the dataset: input_pipeline_id=%d num_input_pipelines=%d',
+        input_context.input_pipeline_id, input_context.num_input_pipelines)
+    dataset = dataset.shard(input_context.num_input_pipelines,
+                            input_context.input_pipeline_id)
+                            
   dataset = dataset.batch(batch_size, drop_remainder=False)
   dataset = dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 
@@ -297,7 +304,7 @@ def run(flags_obj):
       "task": {"type": "worker", "index": 0}
   })
 
-  num_workers = len(tf_config['cluster']['worker'])
+  # num_workers = len(tf_config['cluster']['worker'])
 
   print("1 --- ")
 
