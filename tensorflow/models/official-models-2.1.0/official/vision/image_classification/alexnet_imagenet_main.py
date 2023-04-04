@@ -49,27 +49,27 @@ def dataset_fn(_):
   num_readers = 10
 
   filenames = imagenet_preprocessing.get_shuffled_filenames(is_training, data_dir, num_epochs)
-  dataset = tf.data.Dataset.from_tensor_slices(filenames)
-  dataset = dataset.interleave(tf.data.TFRecordDataset, cycle_length=40, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  # dataset = tf.data.Dataset.from_tensor_slices(filenames)
+  # dataset = dataset.interleave(tf.data.TFRecordDataset, cycle_length=40, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
-  dataset = dataset.shuffle(shuffle_buffer_size).repeat()
+  # dataset = dataset.shuffle(shuffle_buffer_size).repeat()
+  # dataset = dataset.map(
+  #       lambda value: imagenet_preprocessing.parse_record(value, is_training, dtype),
+  #       num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  # dataset = dataset.batch(batch_size, drop_remainder=False)
+  # dataset = dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
+
+  dataset = tf.data.Dataset.list_files(filenames, shuffle=False)
+  dataset = dataset.shard(num_workers, worker_index)
+  dataset = dataset.repeat(num_epochs)
+  dataset = dataset.shuffle(shuffle_buffer_size)
+  dataset = dataset.interleave(tf.data.TFRecordDataset,
+                  cycle_length=num_readers, block_length=1)
   dataset = dataset.map(
         lambda value: imagenet_preprocessing.parse_record(value, is_training, dtype),
         num_parallel_calls=tf.data.experimental.AUTOTUNE)
   dataset = dataset.batch(batch_size, drop_remainder=False)
   dataset = dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
-
-  # dataset = tf.data.Dataset.list_files(filenames, shuffle=False)
-  # dataset = dataset.shard(num_workers, worker_index)
-  # dataset = dataset.repeat(num_epochs)
-  # dataset = dataset.shuffle(shuffle_buffer_size)
-  # dataset = dataset.interleave(tf.data.TFRecordDataset,
-  #                 cycle_length=num_readers, block_length=1)
-  # dataset = dataset.map(
-  #       lambda value: imagenet_preprocessing.parse_record(value, is_training, dtype),
-  #       num_parallel_calls=tf.data.experimental.AUTOTUNE)
-  # # dataset = dataset.batch(batch_size, drop_remainder=False)
-  # # dataset = dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 
   return dataset
 
