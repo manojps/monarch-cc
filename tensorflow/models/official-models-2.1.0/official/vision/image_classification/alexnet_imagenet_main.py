@@ -37,38 +37,42 @@ from official.vision.image_classification import imagenet_preprocessing
 from official.vision.image_classification import alexnet_model
 
 
-def dataset_fn(_):
+def dataset_fn(input_context):
   is_training = True
   data_dir = '/home/cc/nfs/imagenet/tf_records/train/'
   num_epochs = 5
   batch_size = 512
   dtype = tf.float32
-  shuffle_buffer = 100000
+  shuffle_buffer_size = 100000
+  num_workers = 2
+  worker_index = 0
+  num_readers = 10
 
   filenames = imagenet_preprocessing.get_shuffled_filenames(is_training, data_dir, num_epochs)
-  dataset = tf.data.Dataset.from_tensor_slices(filenames)
-  dataset = dataset.interleave(tf.data.TFRecordDataset, cycle_length=40, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  # dataset = tf.data.Dataset.from_tensor_slices(filenames)
+  # dataset = dataset.interleave(tf.data.TFRecordDataset, cycle_length=40, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
-  dataset = dataset.shuffle(shuffle_buffer).repeat()
+  # dataset = dataset.shuffle(shuffle_buffer_size).repeat()
+  # dataset = dataset.map(
+  #       lambda value: imagenet_preprocessing.parse_record(value, is_training, dtype),
+  #       num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  # dataset = dataset.batch(batch_size, drop_remainder=False)
+  # dataset = dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
+
+  dataset = tf.data.Dataset.list_files(filenames, shuffle=False)
+  # dataset = dataset.shard(num_workers, worker_index)
+  dataset = dataset.shard(input_context.num_input_pipelines,
+    input_context.input_pipeline_id)
+  dataset = dataset.repeat(num_epochs)
+  dataset = dataset.shuffle(shuffle_buffer_size)
+  dataset = dataset.interleave(tf.data.TFRecordDataset,
+                  cycle_length=num_readers, block_length=1)
   dataset = dataset.map(
         lambda value: imagenet_preprocessing.parse_record(value, is_training, dtype),
         num_parallel_calls=tf.data.experimental.AUTOTUNE)
-  if input_context:
-    logging.info(
-        'Sharding the dataset: input_pipeline_id=%d num_input_pipelines=%d',
-        input_context.input_pipeline_id, input_context.num_input_pipelines)
-    dataset = dataset.shard(input_context.num_input_pipelines,
-                            input_context.input_pipeline_id)
-                            
   dataset = dataset.batch(batch_size, drop_remainder=False)
   dataset = dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 
-  # x = tf.random.uniform((10, 10))
-  # y = tf.random.uniform((10,))
-
-  # dataset = tf.data.Dataset.from_tensor_slices((x, y)).shuffle(10).repeat()
-  # dataset = dataset.batch(global_batch_size)
-  # dataset = dataset.prefetch(2)
   return dataset
 
 def run_(flags_obj):
@@ -321,7 +325,13 @@ def run(flags_obj):
 
   steps_per_epoch=imagenet_preprocessing.NUM_IMAGES['train'] // flags_obj.batch_size
 
-  dataset_creator = tf.keras.utils.experimental.DatasetCreator(dataset_fn)
+  dataset_creator = tf.keras.utils.experimental.DatasetCreator(dataset_fn,
+        tf.distribute.InputOptions(
+            experimental_fetch_to_device=None,
+            experimental_replication_mode=tf.distribute.InputReplicationMode.PER_WORKER,
+            experimental_place_dataset_on_device=False,
+            experimental_per_replica_buffer_size=1
+        ))
 
   model.fit(dataset_creator, epochs=flags_obj.train_epochs, steps_per_epoch=steps_per_epoch)
 
