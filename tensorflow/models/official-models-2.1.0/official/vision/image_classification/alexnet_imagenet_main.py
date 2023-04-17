@@ -39,14 +39,14 @@ from official.vision.image_classification import alexnet_model
 
 def dataset_fn(_):
   is_training = True
-  data_dir = '/home/cc/nfs/imagenet/tf_records/train/'
+  data_dir = '/home/manojps/Documents/multipass_shared/dataset/imagenet/tf_record/train'
   num_epochs = 5
   batch_size = 512
   dtype = tf.float32
   shuffle_buffer_size = 1
   num_workers = 2
   worker_index = 0
-  num_readers = 10
+  num_readers = 1
 
   filenames = imagenet_preprocessing.get_shuffled_filenames(is_training, data_dir, num_epochs)
   print(filenames)
