@@ -43,12 +43,13 @@ def dataset_fn(_):
   num_epochs = 5
   batch_size = 512
   dtype = tf.float32
-  shuffle_buffer_size = 100000
+  shuffle_buffer_size = 1
   num_workers = 2
   worker_index = 0
   num_readers = 10
 
   filenames = imagenet_preprocessing.get_shuffled_filenames(is_training, data_dir, num_epochs)
+  print(filenames)
   # dataset = tf.data.Dataset.from_tensor_slices(filenames)
   # dataset = dataset.interleave(tf.data.TFRecordDataset, cycle_length=40, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
