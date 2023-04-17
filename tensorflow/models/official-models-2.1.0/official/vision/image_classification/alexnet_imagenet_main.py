@@ -301,9 +301,9 @@ def run_(flags_obj):
 def run(flags_obj):
   os.environ["TF_CONFIG"] = json.dumps({
       "cluster": {
-            "worker": ["10.31.0.37:6433", "10.31.0.39:6434"],
-            "ps": ["10.31.0.46:6435"],
-            "chief": ["10.31.0.36:6436"]
+            "worker": ["10.2.80.4:6433", "10.2.80.8:6434"],
+            "ps": ["10.2.80.152:6435"],
+            "chief": ["10.2.80.177:6436"]
         },
       "task": {"type": "chief", "index": 0}
   })
