@@ -24,6 +24,7 @@ import json
 from absl import app
 from absl import flags
 from absl import logging
+import tensorflow_decision_forests as tfdf
 import tensorflow as tf
 
 from official.benchmark.models import trivial_model
@@ -37,19 +38,20 @@ from official.vision.image_classification import imagenet_preprocessing
 from official.vision.image_classification import alexnet_model
 
 
-def dataset_fn(_):
+def dataset_fn(context, filenames):
   is_training = True
   data_dir = '/home/cc/nfs/imagenet/tf_records/train/'
-  num_epochs = 5
+  num_epochs = 1
   batch_size = 512
   dtype = tf.float32
-  shuffle_buffer_size = 100000
+  shuffle_buffer_size = 1
   num_workers = 2
   worker_index = 0
-  num_readers = 10
+  num_readers = 1
 
-  filenames = imagenet_preprocessing.get_shuffled_filenames(is_training, data_dir, num_epochs)
-  # dataset = tf.data.Dataset.from_tensor_slices(filenames)
+  # filenames = imagenet_preprocessing.get_shuffled_filenames(is_training, data_dir, num_epochs)
+  print(filenames)
+  dataset = tf.data.Dataset.from_tensor_slices(filenames)
   # dataset = dataset.interleave(tf.data.TFRecordDataset, cycle_length=40, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
   # dataset = dataset.shuffle(shuffle_buffer_size).repeat()
@@ -59,251 +61,257 @@ def dataset_fn(_):
   # dataset = dataset.batch(batch_size, drop_remainder=False)
   # dataset = dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 
-  dataset = tf.data.Dataset.list_files(filenames, shuffle=False)
-  dataset = dataset.shard(num_workers, worker_index)
+  # dataset = tf.data.Dataset.list_files(filenames, shuffle=False)
+  assert context is not None 
+
+  # dataset = dataset.shard(num_workers, worker_index)
+
+  current_worker = tfdf.keras.get_worker_idx_and_num_workers(context)
+  dataset = dataset.shard(
+      num_shards=current_worker.num_workers,
+      index=current_worker.worker_idx)
+
   dataset = dataset.repeat(num_epochs)
-  dataset = dataset.shuffle(shuffle_buffer_size)
-  dataset = dataset.interleave(tf.data.TFRecordDataset,
-                  cycle_length=num_readers, block_length=1)
+  # dataset = dataset.shuffle(shuffle_buffer_size)
+  dataset = dataset.interleave(tf.data.TFRecordDataset)
   dataset = dataset.map(
-        lambda value: imagenet_preprocessing.parse_record(value, is_training, dtype),
-        num_parallel_calls=tf.data.experimental.AUTOTUNE)
+        lambda value: imagenet_preprocessing.parse_record(value, is_training, dtype))
   dataset = dataset.batch(batch_size, drop_remainder=False)
-  dataset = dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
+  # dataset = dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 
   return dataset
 
-def run_(flags_obj):
-  """Run ResNet ImageNet training and eval loop using native Keras APIs.
+# def run_(flags_obj):
+#   """Run ResNet ImageNet training and eval loop using native Keras APIs.
 
-  Args:
-    flags_obj: An object containing parsed flag values.
+#   Args:
+#     flags_obj: An object containing parsed flag values.
 
-  Raises:
-    ValueError: If fp16 is passed as it is not currently supported.
+#   Raises:
+#     ValueError: If fp16 is passed as it is not currently supported.
 
-  Returns:
-    Dictionary of training and eval stats.
-  """
-  keras_utils.set_session_config(
-      enable_eager=flags_obj.enable_eager,
-      enable_xla=flags_obj.enable_xla)
+#   Returns:
+#     Dictionary of training and eval stats.
+#   """
+#   keras_utils.set_session_config(
+#       enable_eager=flags_obj.enable_eager,
+#       enable_xla=flags_obj.enable_xla)
 
-  # Execute flag override logic for better model performance
-  if flags_obj.tf_gpu_thread_mode:
-    keras_utils.set_gpu_thread_mode_and_count(
-        per_gpu_thread_count=flags_obj.per_gpu_thread_count,
-        gpu_thread_mode=flags_obj.tf_gpu_thread_mode,
-        num_gpus=flags_obj.num_gpus,
-        datasets_num_private_threads=flags_obj.datasets_num_private_threads)
-  common.set_cudnn_batchnorm_mode()
+#   # Execute flag override logic for better model performance
+#   if flags_obj.tf_gpu_thread_mode:
+#     keras_utils.set_gpu_thread_mode_and_count(
+#         per_gpu_thread_count=flags_obj.per_gpu_thread_count,
+#         gpu_thread_mode=flags_obj.tf_gpu_thread_mode,
+#         num_gpus=flags_obj.num_gpus,
+#         datasets_num_private_threads=flags_obj.datasets_num_private_threads)
+#   common.set_cudnn_batchnorm_mode()
 
-  dtype = flags_core.get_tf_dtype(flags_obj)
-  if dtype == tf.float16:
-    loss_scale = flags_core.get_loss_scale(flags_obj, default_for_fp16=128)
-    policy = tf.compat.v2.keras.mixed_precision.experimental.Policy(
-        'mixed_float16', loss_scale=loss_scale)
-    tf.compat.v2.keras.mixed_precision.experimental.set_policy(policy)
-    if not keras_utils.is_v2_0():
-      raise ValueError('--dtype=fp16 is not supported in TensorFlow 1.')
-  elif dtype == tf.bfloat16:
-    policy = tf.compat.v2.keras.mixed_precision.experimental.Policy(
-        'mixed_bfloat16')
-    tf.compat.v2.keras.mixed_precision.experimental.set_policy(policy)
+#   dtype = flags_core.get_tf_dtype(flags_obj)
+#   if dtype == tf.float16:
+#     loss_scale = flags_core.get_loss_scale(flags_obj, default_for_fp16=128)
+#     policy = tf.compat.v2.keras.mixed_precision.experimental.Policy(
+#         'mixed_float16', loss_scale=loss_scale)
+#     tf.compat.v2.keras.mixed_precision.experimental.set_policy(policy)
+#     if not keras_utils.is_v2_0():
+#       raise ValueError('--dtype=fp16 is not supported in TensorFlow 1.')
+#   elif dtype == tf.bfloat16:
+#     policy = tf.compat.v2.keras.mixed_precision.experimental.Policy(
+#         'mixed_bfloat16')
+#     tf.compat.v2.keras.mixed_precision.experimental.set_policy(policy)
 
-  data_format = flags_obj.data_format
-  if data_format is None:
-    data_format = ('channels_first'
-                   if tf.test.is_built_with_cuda() else 'channels_last')
-  tf.keras.backend.set_image_data_format(data_format)
+#   data_format = flags_obj.data_format
+#   if data_format is None:
+#     data_format = ('channels_first'
+#                    if tf.test.is_built_with_cuda() else 'channels_last')
+#   tf.keras.backend.set_image_data_format(data_format)
 
-  # Configures cluster spec for distribution strategy.
-  num_workers = distribution_utils.configure_cluster(flags_obj.worker_hosts,
-                                                     flags_obj.task_index)
+#   # Configures cluster spec for distribution strategy.
+#   num_workers = distribution_utils.configure_cluster(flags_obj.worker_hosts,
+#                                                      flags_obj.task_index)
 
-  strategy = distribution_utils.get_distribution_strategy(
-      distribution_strategy=flags_obj.distribution_strategy,
-      num_gpus=flags_obj.num_gpus,
-      num_workers=num_workers,
-      all_reduce_alg=flags_obj.all_reduce_alg,
-      num_packs=flags_obj.num_packs,
-      tpu_address=flags_obj.tpu)
+#   strategy = distribution_utils.get_distribution_strategy(
+#       distribution_strategy=flags_obj.distribution_strategy,
+#       num_gpus=flags_obj.num_gpus,
+#       num_workers=num_workers,
+#       all_reduce_alg=flags_obj.all_reduce_alg,
+#       num_packs=flags_obj.num_packs,
+#       tpu_address=flags_obj.tpu)
 
-  if strategy:
-    # flags_obj.enable_get_next_as_optional controls whether enabling
-    # get_next_as_optional behavior in DistributedIterator. If true, last
-    # partial batch can be supported.
-    strategy.extended.experimental_enable_get_next_as_optional = (
-        flags_obj.enable_get_next_as_optional
-    )
+#   if strategy:
+#     # flags_obj.enable_get_next_as_optional controls whether enabling
+#     # get_next_as_optional behavior in DistributedIterator. If true, last
+#     # partial batch can be supported.
+#     strategy.extended.experimental_enable_get_next_as_optional = (
+#         flags_obj.enable_get_next_as_optional
+#     )
 
-  strategy_scope = distribution_utils.get_strategy_scope(strategy)
+#   strategy_scope = distribution_utils.get_strategy_scope(strategy)
 
-  # pylint: disable=protected-access
-  if flags_obj.use_synthetic_data:
-    distribution_utils.set_up_synthetic_data()
-    input_fn = common.get_synth_input_fn(
-        height=imagenet_preprocessing.DEFAULT_IMAGE_SIZE,
-        width=imagenet_preprocessing.DEFAULT_IMAGE_SIZE,
-        num_channels=imagenet_preprocessing.NUM_CHANNELS,
-        num_classes=imagenet_preprocessing.NUM_CLASSES,
-        dtype=dtype,
-        drop_remainder=True)
-  else:
-    distribution_utils.undo_set_up_synthetic_data()
-    input_fn = imagenet_preprocessing.input_fn
+#   # pylint: disable=protected-access
+#   if flags_obj.use_synthetic_data:
+#     distribution_utils.set_up_synthetic_data()
+#     input_fn = common.get_synth_input_fn(
+#         height=imagenet_preprocessing.DEFAULT_IMAGE_SIZE,
+#         width=imagenet_preprocessing.DEFAULT_IMAGE_SIZE,
+#         num_channels=imagenet_preprocessing.NUM_CHANNELS,
+#         num_classes=imagenet_preprocessing.NUM_CLASSES,
+#         dtype=dtype,
+#         drop_remainder=True)
+#   else:
+#     distribution_utils.undo_set_up_synthetic_data()
+#     input_fn = imagenet_preprocessing.input_fn
 
-  # When `enable_xla` is True, we always drop the remainder of the batches
-  # in the dataset, as XLA-GPU doesn't support dynamic shapes.
-  drop_remainder = flags_obj.enable_xla
+#   # When `enable_xla` is True, we always drop the remainder of the batches
+#   # in the dataset, as XLA-GPU doesn't support dynamic shapes.
+#   drop_remainder = flags_obj.enable_xla
 
-  train_input_dataset = input_fn(
-      is_training=True,
-      data_dir=flags_obj.data_dir,
-      batch_size=flags_obj.batch_size,
-      num_epochs=flags_obj.train_epochs,
-      parse_record_fn=imagenet_preprocessing.parse_record,
-      datasets_num_private_threads=flags_obj.datasets_num_private_threads,
-      dtype=dtype,
-      drop_remainder=drop_remainder,
-      tf_data_experimental_slack=flags_obj.tf_data_experimental_slack,
-      training_dataset_cache=flags_obj.training_dataset_cache,
-  )
+#   train_input_dataset = input_fn(
+#       is_training=True,
+#       data_dir=flags_obj.data_dir,
+#       batch_size=flags_obj.batch_size,
+#       num_epochs=flags_obj.train_epochs,
+#       parse_record_fn=imagenet_preprocessing.parse_record,
+#       datasets_num_private_threads=flags_obj.datasets_num_private_threads,
+#       dtype=dtype,
+#       drop_remainder=drop_remainder,
+#       tf_data_experimental_slack=flags_obj.tf_data_experimental_slack,
+#       training_dataset_cache=flags_obj.training_dataset_cache,
+#   )
 
-  eval_input_dataset = None
-  if not flags_obj.skip_eval:
-    eval_input_dataset = input_fn(
-        is_training=False,
-        data_dir=flags_obj.data_dir,
-        batch_size=flags_obj.batch_size,
-        num_epochs=flags_obj.train_epochs,
-        parse_record_fn=imagenet_preprocessing.parse_record,
-        dtype=dtype,
-        drop_remainder=drop_remainder)
+#   eval_input_dataset = None
+#   if not flags_obj.skip_eval:
+#     eval_input_dataset = input_fn(
+#         is_training=False,
+#         data_dir=flags_obj.data_dir,
+#         batch_size=flags_obj.batch_size,
+#         num_epochs=flags_obj.train_epochs,
+#         parse_record_fn=imagenet_preprocessing.parse_record,
+#         dtype=dtype,
+#         drop_remainder=drop_remainder)
 
-  lr_schedule = 0.1
-  if flags_obj.use_tensor_lr:
-    lr_schedule = common.PiecewiseConstantDecayWithWarmup(
-        batch_size=flags_obj.batch_size,
-        epoch_size=imagenet_preprocessing.NUM_IMAGES['train'],
-        warmup_epochs=common.LR_SCHEDULE[0][1],
-        boundaries=list(p[1] for p in common.LR_SCHEDULE[1:]),
-        multipliers=list(p[0] for p in common.LR_SCHEDULE),
-        compute_lr_on_cpu=True)
+#   lr_schedule = 0.1
+#   if flags_obj.use_tensor_lr:
+#     lr_schedule = common.PiecewiseConstantDecayWithWarmup(
+#         batch_size=flags_obj.batch_size,
+#         epoch_size=imagenet_preprocessing.NUM_IMAGES['train'],
+#         warmup_epochs=common.LR_SCHEDULE[0][1],
+#         boundaries=list(p[1] for p in common.LR_SCHEDULE[1:]),
+#         multipliers=list(p[0] for p in common.LR_SCHEDULE),
+#         compute_lr_on_cpu=True)
 
-  with strategy_scope:
-    optimizer = common.get_optimizer(lr_schedule)
-    if flags_obj.fp16_implementation == 'graph_rewrite':
-      # Note: when flags_obj.fp16_implementation == "graph_rewrite", dtype as
-      # determined by flags_core.get_tf_dtype(flags_obj) would be 'float32'
-      # which will ensure tf.compat.v2.keras.mixed_precision and
-      # tf.train.experimental.enable_mixed_precision_graph_rewrite do not double
-      # up.
-      optimizer = tf.train.experimental.enable_mixed_precision_graph_rewrite(
-          optimizer)
+#   with strategy_scope:
+#     optimizer = common.get_optimizer(lr_schedule)
+#     if flags_obj.fp16_implementation == 'graph_rewrite':
+#       # Note: when flags_obj.fp16_implementation == "graph_rewrite", dtype as
+#       # determined by flags_core.get_tf_dtype(flags_obj) would be 'float32'
+#       # which will ensure tf.compat.v2.keras.mixed_precision and
+#       # tf.train.experimental.enable_mixed_precision_graph_rewrite do not double
+#       # up.
+#       optimizer = tf.train.experimental.enable_mixed_precision_graph_rewrite(
+#           optimizer)
 
-    # TODO(hongkuny): Remove trivial model usage and move it to benchmark.
-    if flags_obj.use_trivial_model:
-      model = trivial_model.trivial_model(
-          imagenet_preprocessing.NUM_CLASSES)
-    else:
-      model = alexnet_model.alexnet()
+#     # TODO(hongkuny): Remove trivial model usage and move it to benchmark.
+#     if flags_obj.use_trivial_model:
+#       model = trivial_model.trivial_model(
+#           imagenet_preprocessing.NUM_CLASSES)
+#     else:
+#       model = alexnet_model.alexnet()
 
-    # TODO(b/138957587): Remove when force_v2_in_keras_compile is on longer
-    # a valid arg for this model. Also remove as a valid flag.
-    if flags_obj.force_v2_in_keras_compile is not None:
-      model.compile(
-          loss='sparse_categorical_crossentropy',
-          optimizer=optimizer,
-          metrics=(['sparse_categorical_accuracy']
-                   if flags_obj.report_accuracy_metrics else None),
-          run_eagerly=flags_obj.run_eagerly,
-          experimental_run_tf_function=flags_obj.force_v2_in_keras_compile)
-    else:
-      model.compile(
-          loss='sparse_categorical_crossentropy',
-          optimizer=optimizer,
-          metrics=(['sparse_categorical_accuracy']
-                   if flags_obj.report_accuracy_metrics else None),
-          run_eagerly=flags_obj.run_eagerly)
+#     # TODO(b/138957587): Remove when force_v2_in_keras_compile is on longer
+#     # a valid arg for this model. Also remove as a valid flag.
+#     if flags_obj.force_v2_in_keras_compile is not None:
+#       model.compile(
+#           loss='sparse_categorical_crossentropy',
+#           optimizer=optimizer,
+#           metrics=(['sparse_categorical_accuracy']
+#                    if flags_obj.report_accuracy_metrics else None),
+#           run_eagerly=flags_obj.run_eagerly,
+#           experimental_run_tf_function=flags_obj.force_v2_in_keras_compile)
+#     else:
+#       model.compile(
+#           loss='sparse_categorical_crossentropy',
+#           optimizer=optimizer,
+#           metrics=(['sparse_categorical_accuracy']
+#                    if flags_obj.report_accuracy_metrics else None),
+#           run_eagerly=flags_obj.run_eagerly)
 
-  steps_per_epoch = (
-      imagenet_preprocessing.NUM_IMAGES['train'] // flags_obj.batch_size)
-  train_epochs = flags_obj.train_epochs
+#   steps_per_epoch = (
+#       imagenet_preprocessing.NUM_IMAGES['train'] // flags_obj.batch_size)
+#   train_epochs = flags_obj.train_epochs
 
-  callbacks = common.get_callbacks(steps_per_epoch,
-                                   common.learning_rate_schedule)
-  if flags_obj.enable_checkpoint_and_export:
-    ckpt_full_path = os.path.join(flags_obj.model_dir, 'model.ckpt-{epoch:04d}')
-    callbacks.append(tf.keras.callbacks.ModelCheckpoint(ckpt_full_path,
-                                                        save_weights_only=True))
+#   callbacks = common.get_callbacks(steps_per_epoch,
+#                                    common.learning_rate_schedule)
+#   if flags_obj.enable_checkpoint_and_export:
+#     ckpt_full_path = os.path.join(flags_obj.model_dir, 'model.ckpt-{epoch:04d}')
+#     callbacks.append(tf.keras.callbacks.ModelCheckpoint(ckpt_full_path,
+#                                                         save_weights_only=True))
 
-  # if mutliple epochs, ignore the train_steps flag.
-  if train_epochs <= 1 and flags_obj.train_steps:
-    steps_per_epoch = min(flags_obj.train_steps, steps_per_epoch)
-    train_epochs = 1
+#   # if mutliple epochs, ignore the train_steps flag.
+#   if train_epochs <= 1 and flags_obj.train_steps:
+#     steps_per_epoch = min(flags_obj.train_steps, steps_per_epoch)
+#     train_epochs = 1
 
-  num_eval_steps = (
-      imagenet_preprocessing.NUM_IMAGES['validation'] // flags_obj.batch_size)
+#   num_eval_steps = (
+#       imagenet_preprocessing.NUM_IMAGES['validation'] // flags_obj.batch_size)
 
-  validation_data = eval_input_dataset
-  if flags_obj.skip_eval:
-    # Only build the training graph. This reduces memory usage introduced by
-    # control flow ops in layers that have different implementations for
-    # training and inference (e.g., batch norm).
-    if flags_obj.set_learning_phase_to_train:
-      # TODO(haoyuzhang): Understand slowdown of setting learning phase when
-      # not using distribution strategy.
-      tf.keras.backend.set_learning_phase(1)
-    num_eval_steps = None
-    validation_data = None
+#   validation_data = eval_input_dataset
+#   if flags_obj.skip_eval:
+#     # Only build the training graph. This reduces memory usage introduced by
+#     # control flow ops in layers that have different implementations for
+#     # training and inference (e.g., batch norm).
+#     if flags_obj.set_learning_phase_to_train:
+#       # TODO(haoyuzhang): Understand slowdown of setting learning phase when
+#       # not using distribution strategy.
+#       tf.keras.backend.set_learning_phase(1)
+#     num_eval_steps = None
+#     validation_data = None
 
-  if not strategy and flags_obj.explicit_gpu_placement:
-    # TODO(b/135607227): Add device scope automatically in Keras training loop
-    # when not using distribition strategy.
-    no_dist_strat_device = tf.device('/device:GPU:0')
-    no_dist_strat_device.__enter__()
+#   if not strategy and flags_obj.explicit_gpu_placement:
+#     # TODO(b/135607227): Add device scope automatically in Keras training loop
+#     # when not using distribition strategy.
+#     no_dist_strat_device = tf.device('/device:GPU:0')
+#     no_dist_strat_device.__enter__()
 
   
 
-  # input_options = tf.distribute.InputOptions(
-  #   experimental_fetch_to_device=False,
-  #   experimental_per_replica_buffer_size=1)
+#   # input_options = tf.distribute.InputOptions(
+#   #   experimental_fetch_to_device=False,
+#   #   experimental_per_replica_buffer_size=1)
 
-  history = model.fit(input_fn,
-                      epochs=train_epochs,
-                      steps_per_epoch=steps_per_epoch,
-                      callbacks=callbacks,
-                      validation_steps=num_eval_steps,
-                      validation_data=validation_data,
-                      validation_freq=flags_obj.epochs_between_evals,
-                      verbose=2)
-  if flags_obj.enable_checkpoint_and_export:
-    if dtype == tf.bfloat16:
-      logging.warning("Keras model.save does not support bfloat16 dtype.")
-    else:
-      # Keras model.save assumes a float32 input designature.
-      export_path = os.path.join(flags_obj.model_dir, 'saved_model')
-      model.save(export_path, include_optimizer=False)
+#   history = model.fit(input_fn,
+#                       epochs=train_epochs,
+#                       steps_per_epoch=steps_per_epoch,
+#                       callbacks=callbacks,
+#                       validation_steps=num_eval_steps,
+#                       validation_data=validation_data,
+#                       validation_freq=flags_obj.epochs_between_evals,
+#                       verbose=2)
+#   if flags_obj.enable_checkpoint_and_export:
+#     if dtype == tf.bfloat16:
+#       logging.warning("Keras model.save does not support bfloat16 dtype.")
+#     else:
+#       # Keras model.save assumes a float32 input designature.
+#       export_path = os.path.join(flags_obj.model_dir, 'saved_model')
+#       model.save(export_path, include_optimizer=False)
 
-  eval_output = None
-  if not flags_obj.skip_eval:
-    eval_output = model.evaluate(eval_input_dataset,
-                                 steps=num_eval_steps,
-                                 verbose=2)
+#   eval_output = None
+#   if not flags_obj.skip_eval:
+#     eval_output = model.evaluate(eval_input_dataset,
+#                                  steps=num_eval_steps,
+#                                  verbose=2)
 
-  if not strategy and flags_obj.explicit_gpu_placement:
-    no_dist_strat_device.__exit__()
+#   if not strategy and flags_obj.explicit_gpu_placement:
+#     no_dist_strat_device.__exit__()
 
-  stats = common.build_stats(history, eval_output, callbacks)
-  return stats
+#   stats = common.build_stats(history, eval_output, callbacks)
+#   return stats
 
 def run(flags_obj):
   os.environ["TF_CONFIG"] = json.dumps({
       "cluster": {
-            "worker": ["10.31.0.37:6433", "10.31.0.39:6434"],
-            "ps": ["10.31.0.46:6435"],
-            "chief": ["10.31.0.36:6436"]
+            "worker": ["10.31.0.44:6433", "10.31.0.45:6434"],
+            "ps": ["10.31.0.41:6435"],
+            "chief": ["10.31.0.37:6436"]
         },
       "task": {"type": "worker", "index": 0}
   })
@@ -315,15 +323,11 @@ def run(flags_obj):
       # Start a TensorFlow server and wait.
       os.environ["GRPC_FAIL_FAST"] = "use_caller"
 
-      worker_config = tf.compat.v1.ConfigProto()
-      worker_config.inter_op_parallelism_threads = 8
-
       server = tf.distribute.Server(
           cluster_resolver.cluster_spec(),
           job_name=cluster_resolver.task_type,
           task_index=cluster_resolver.task_id,
           protocol=cluster_resolver.rpc_layer or "grpc",
-          config=worker_config,
           start=True)
       server.join()
 
@@ -344,43 +348,30 @@ def run(flags_obj):
   
   print(type(lr_schedule),lr_schedule)
 
-  # filenames = imagenet_preprocessing.get_shuffled_filenames(True, flags_obj.data_dir, 2)
-  # dataset = tf.data.Dataset.from_tensor_slices(filenames).shuffle(10).repeat().batch(64)
-
-  # if input_context:
-  #   logging.info(
-  #       'Sharding the dataset: input_pipeline_id=%d num_input_pipelines=%d',
-  #       input_context.input_pipeline_id, input_context.num_input_pipelines)
-  #   dataset = dataset.shard(input_context.num_input_pipelines,
-  #                           input_context.input_pipeline_id)
-  # dataset = dataset.interleave(tf.data.TFRecordDataset, cycle_length=10, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-
-  # dataset = dataset.shuffle(buffer_size=2)
-  # dataset = dataset.map(
-  #       lambda value: imagenet_preprocessing.parse_record(value, True, tf.float32),
-  #       num_parallel_calls=tf.data.experimental.AUTOTUNE)
-  # dataset = dataset.batch(128)
-  # dataset = dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
-
-  # input_options = tf.distribute.InputOptions(
-  #   experimental_fetch_to_device=True,
-  #   experimental_per_replica_buffer_size=2)
-
-  # print(type(dataset), dataset)
-
-  
+  is_training = True
+  data_dir = '/home/cc/nfs/imagenet/tf_records/train/'
+  num_epochs = flags_obj.train_epochs
+  filenames = imagenet_preprocessing.get_shuffled_filenames(is_training, data_dir, num_epochs)
 
   with strategy.scope():
     model = alexnet_model.alexnet()
+
+    train_dataset = strategy.distribute_datasets_from_function(
+      lambda context: dataset_fn(context, filenames))
     # optimizer = common.get_optimizer(lr_schedule)
     optimizer = tf.keras.optimizers.legacy.SGD()
     model.compile(optimizer, loss = "mse")
 
   steps_per_epoch=imagenet_preprocessing.NUM_IMAGES['train'] // flags_obj.batch_size
 
-  dataset_creator = tf.keras.utils.experimental.DatasetCreator(dataset_fn)
+  # dataset_creator = tf.keras.utils.experimental.DatasetCreator(dataset_fn)
 
-  model.fit(dataset_creator, epochs=flags_obj.train_epochs, steps_per_epoch=steps_per_epoch)
+  # model.fit(dataset_creator, epochs=flags_obj.train_epochs, steps_per_epoch=steps_per_epoch)
+
+  model.fit(train_dataset, epochs=flags_obj.train_epochs, steps_per_epoch=steps_per_epoch)
+
+  print("Trained model")
+  model.summary()
 
   return 
 
